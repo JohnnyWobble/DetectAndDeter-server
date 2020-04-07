@@ -5,120 +5,87 @@
 # initialised as a queue. The pyaudio stream would be continuosly adding
 # recordings to the queue, and the websocket client would be sending the
 # recordings to the speech to text service
-import datetime
-import sys
 
+from threading import Thread
+from queue import Queue, Full
+
+from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 import pyaudio
-
 from ibm_watson import SpeechToTextV1
 from ibm_watson.websocket import AudioSource
-from threading import Thread
-
-# from multiprocessing import Process, Queue
-from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 
 from recog_callback import RecognizeCallback1
-# from ai import predict_text
-
-try:
-    from Queue import Queue, Full
-except ImportError:
-    from queue import Queue, Full
-
-###############################################
-#### Initalize queue to store the recordings ##
-###############################################
-CHUNK = 1024
-# Note: It will discard if the websocket client can't consume fast enough
-# So, increase the max size as per your choice
-BUF_MAX_SIZE = CHUNK * 10
-# Buffer to store audio
-q = Queue(maxsize=int(round(BUF_MAX_SIZE / CHUNK)))
-
-# Create an instance of AudioSource
-audio_source = AudioSource(q, True, True)
-
-###############################################
-#### Prepare Speech to Text Service ########
-###############################################
-
-# initialize speech to text service
-authenticator = IAMAuthenticator('zPJij17cD8uAVUsaWqRgZPyGt9CH5q8XuwNGurfFhtXW')
-speech_to_text = SpeechToTextV1(authenticator=authenticator)
 
 
-# this function will initiate the recognize service and pass in the AudioSource
+class WatsonRecognizer:
+    # Note: It will discard if the websocket client can't consume fast enough
+    # So, increase the max size as per your choice
+    CHUNK = 1024
+    BUF_MAX_SIZE = CHUNK * 10
 
+    # Variables for recording the speech
+    FORMAT = pyaudio.paInt16
+    CHANNELS = 1
+    RATE = 44100
 
-def recognize_using_weboscket(*args):
-    mycallback = RecognizeCallback1()
-    speech_to_text.recognize_using_websocket(audio=audio_source,
-                                             content_type='audio/l16; rate=44100',
-                                             recognize_callback=mycallback,
-                                             interim_results=True)
+    def __init__(self):
+        # Buffer to store audio
+        self.q = Queue(maxsize=int(round(self.BUF_MAX_SIZE / self.CHUNK)))
+        self.audio_source = AudioSource(self.q, True, True)
+        self.callback = RecognizeCallback1()
 
-###############################################
-#### Prepare the for recording using Pyaudio ##
-###############################################
+        # initialize speech to text service
+        self.authenticator = IAMAuthenticator('zPJij17cD8uAVUsaWqRgZPyGt9CH5q8XuwNGurfFhtXW')
+        self.speech_to_text = SpeechToTextV1(authenticator=self.authenticator)
 
+        # instantiate audio
+        self.audio = pyaudio.PyAudio()
 
-# Variables for recording the speech
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
-RATE = 44100
+        # open stream using callback
+        self.stream = self.audio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK,
+            stream_callback=self.pyaudio_callback,
+            start=False
+        )
 
-# define callback for pyaudio to store the recording in queue
+        # thread for the speech recognition
+        self.thread = Thread(target=self.speech_to_text.recognize_using_websocket, kwargs={
+            "audio": self.audio_source,
+            "content_type": "audio/l16; rate=44100",
+            "recognize_callback": self.callback,
+            "interim_results": True})
 
+    def pyaudio_callback(self, in_data, frame_count, time_info, status):
+        try:
+            self.q.put(in_data)
+        except Full:
+            pass  # discard
+        return None, pyaudio.paContinue
 
-def pyaudio_callback(in_data, frame_count, time_info, status):
-    # print(in_data)
-    try:
-        q.put(in_data)
-    except Full:
-        pass  # discard
-    return None, pyaudio.paContinue
+    def start(self):
+        self.stream.start_stream()
+        self.thread.start()
 
+    def close(self, timeout=20):
+        self.thread.join(timeout=timeout)
+        self.stream.stop_stream()
+        self.stream.close()
+        self.audio.terminate()
+        self.audio_source.completed_recording()
 
-# instantiate pyaudio
-audio = pyaudio.PyAudio()
-
-# open stream using callback
-stream = audio.open(
-    format=FORMAT,
-    channels=CHANNELS,
-    rate=RATE,
-    input=True,
-    frames_per_buffer=CHUNK,
-    stream_callback=pyaudio_callback,
-    start=False
-)
-
-#########################################################################
-#### Start the recording and start service to recognize the stream ######
-#########################################################################
-SPEECH = True
 
 if __name__ == '__main__':
-    if SPEECH:
-        print("Enter CTRL+C to end recording...")
-        stream.start_stream()
+    watson = WatsonRecognizer()
 
-        try:
-            recognize_thread = Thread(target=speech_to_text.recognize_using_websocket, kwargs={
-                "audio": audio_source,
-                "content_type": "audio/l16; rate=44100",
-                "recognize_callback": RecognizeCallback1(),
-                "interim_results": True})
-            recognize_thread.start()
+    try:
+        watson.start()
 
-            while recognize_thread.is_alive():
-                pass
-
-            recognize_thread.join()
-        except (KeyboardInterrupt, SystemExit):
-            # stop recording
-            stream.stop_stream()
-            stream.close()
-            audio.terminate()
-            audio_source.completed_recording()
-            print("end")
+        while watson.thread.is_alive():
+            pass
+    except (KeyboardInterrupt, SystemExit):
+        watson.close()
+        print("end")

@@ -1,5 +1,4 @@
 import warnings
-import datetime
 
 # import fastai
 from fastai import text
@@ -14,6 +13,7 @@ warnings.filterwarnings('ignore')
 
 
 def predict_text(text: str):
+    text.replace(" %HESITATION", "")
     return str(model.predict(text)[0])
 
 

@@ -1,6 +1,7 @@
 import sys
 
 from ibm_watson.websocket import RecognizeCallback
+from ai import predict_text
 
 
 class RecognizeCallback1(RecognizeCallback):
@@ -9,15 +10,8 @@ class RecognizeCallback1(RecognizeCallback):
         RecognizeCallback.__init__(self)
 
     def on_transcription(self, transcript):
-        # print(transcript)
         self.last = transcript[0]['transcript'].strip()
-        # pred = Process(target=predict_text, args=self.last)
-        # pred.start()
-        # pred.join()
-        # prediction = predict_text(self.last)
-        # print("Pronting")
-        print("\r--> ", transcript[0]['transcript'])
-        # print("\r--> ", transcript[0]['transcript'], "--",  predict_text(transcript[0]))
+        print("\r--> ", self.last, "-- ",  predict_text(self.last))
 
     def on_connected(self):
         print('Connection was successful')
@@ -32,12 +26,9 @@ class RecognizeCallback1(RecognizeCallback):
         print('Service is listening')
 
     def on_hypothesis(self, hypothesis):
-        # # print('.....')
         if hypothesis.strip() != self.last:
             print('\r', hypothesis, sep='', end='')
             sys.stdout.flush()
-        # print(hypothesis)
-        # pass
 
     def on_data(self, data):
         pass
