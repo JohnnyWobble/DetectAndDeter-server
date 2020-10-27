@@ -1,6 +1,6 @@
 import pyttsx3
 
-from watson2 import WatsonRecognizer
+from watson_recognizer import WatsonRecognizer
 from ai import predict_text
 from chatbot import get_response
 
@@ -17,9 +17,9 @@ if __name__ == '__main__':
 
         while True:
             text = transcript_q.get()
-            print("> " + text)
+            print("MAX: %-80s" % text, predict_text(text))
             response = get_response(text)
-            print(">>", response)
+            print("BOT:", response)
             engine.say(response)
             engine.runAndWait()
 

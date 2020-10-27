@@ -1,11 +1,3 @@
-# You need to install pyaudio to run this example
-# pip install pyaudio
-
-# When using a microphone, the AudioSource `input` parameter would be
-# initialised as a queue. The pyaudio stream would be continuosly adding
-# recordings to the queue, and the websocket client would be sending the
-# recordings to the speech to text service
-
 from threading import Thread
 from queue import Queue, Full
 
@@ -13,8 +5,7 @@ from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 import pyaudio
 from ibm_watson import SpeechToTextV1
 from ibm_watson.websocket import AudioSource
-
-from recog_callback import RecognizeCallback1
+from ibm_watson.websocket import RecognizeCallback as RCallback
 
 
 class WatsonRecognizer:
@@ -28,11 +19,11 @@ class WatsonRecognizer:
     CHANNELS = 1
     RATE = 44100
 
-    def __init__(self):
+    def __init__(self, prints=False):
         # Buffer to store audio
-        self.q = Queue(maxsize=int(round(self.BUF_MAX_SIZE / self.CHUNK)))
-        self.audio_source = AudioSource(self.q, True, True)
-        self.callback = RecognizeCallback1()
+        self.audio_q = Queue(maxsize=int(round(self.BUF_MAX_SIZE / self.CHUNK)))
+        self.audio_source = AudioSource(self.audio_q, True, True)
+        self.callback = RecognizeCallback(prints=prints)
 
         # initialize speech to text service
         self.authenticator = IAMAuthenticator('zPJij17cD8uAVUsaWqRgZPyGt9CH5q8XuwNGurfFhtXW')
@@ -61,7 +52,7 @@ class WatsonRecognizer:
 
     def pyaudio_callback(self, in_data, frame_count, time_info, status):
         try:
-            self.q.put(in_data)
+            self.audio_q.put(in_data)
         except Full:
             pass  # discard
         return None, pyaudio.paContinue
@@ -78,8 +69,44 @@ class WatsonRecognizer:
         self.audio_source.completed_recording()
 
 
+class RecognizeCallback(RCallback):
+    def __init__(self, prints=False):
+        super().__init__()
+        self.last = ''
+        self.transcript_q = Queue()
+        self.prints = prints
+
+    def on_transcription(self, transcript):
+        self.last = transcript[0]['transcript'].strip()
+        self.transcript_q.put(self.last)
+
+        if self.prints:
+            print("\r--> ", self.last)
+
+    def on_connected(self):
+        print('Connection was successful')
+
+    def on_error(self, error):
+        print('Error received: {}'.format(error))
+
+    def on_inactivity_timeout(self, error):
+        print('Inactivity timeout: {}'.format(error))
+
+    def on_listening(self):
+        print('Service is listening')
+
+    def on_hypothesis(self, hypothesis):
+        if self.prints:
+            if hypothesis.strip() != self.last:
+                print('\r', hypothesis, sep='', end='')
+                sys.stdout.flush()
+
+    def on_close(self):
+        print("Connection closed")
+
+
 if __name__ == '__main__':
-    watson = WatsonRecognizer()
+    watson = WatsonRecognizer(prints=True)
 
     try:
         watson.start()
