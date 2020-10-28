@@ -1,8 +1,12 @@
 from warnings import filterwarnings
+import datetime
 
-from fastai import text
+from fastai.text.all import *
+# from fastai import text
+# import fastai
 
-model: text.RNNLearner = text.load_learner('models', 'finalv1.model')
+model: TextLearner = load_learner('models/finalv1.model')
+print(TextLearner)
 
 filterwarnings('ignore')
 
@@ -32,8 +36,8 @@ def predict_text(text: str):
 if __name__ == '__main__':
     while True:
         user_input = input("> ")
-        timer.reset()
+        now = datetime.now()
         prediction = predict_text(user_input)
-        time_seconds = timer.get()
+        time_seconds = (now - datetime.now()).seconds
         print(prediction, end=' ')
         print(time_seconds, "s", sep="")

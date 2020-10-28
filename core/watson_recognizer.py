@@ -1,5 +1,6 @@
 from threading import Thread
 from queue import Queue, Full
+import sys
 
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 import pyaudio
