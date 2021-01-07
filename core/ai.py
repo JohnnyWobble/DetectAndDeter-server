@@ -5,10 +5,10 @@ from fastai.text.all import *
 # from fastai import text
 # import fastai
 
-model: TextLearner = load_learner('models/finalv1.model')
+model: TextLearner = load_learner('models/rev4-1.model')
 print(TextLearner)
 
-filterwarnings('ignore')
+# filterwarnings('ignore')
 
 
 class Prediction:
@@ -22,8 +22,8 @@ class Prediction:
         return f"Prediction: {self.name}"
 
 
-CATEGORIES = ["Question", "Command", "General Exchange", "Persuasion", "Information", "Formality",
-              "Information", "Conditional"]
+CATEGORIES = ["Question", "Command", "General Exchange", "Persuasion", "Information", "Information",
+              "Conditional"]
 PREDICTIONS = {c: Prediction(c) for c in CATEGORIES}
 
 
