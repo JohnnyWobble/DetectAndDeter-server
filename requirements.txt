@@ -1,5 +1,5 @@
 chatterbot
 torch
 fastai
-discord.py
 ibm-watson
+pyaudio
