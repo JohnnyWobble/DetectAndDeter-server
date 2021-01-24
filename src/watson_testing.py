@@ -7,7 +7,7 @@ from ibm_watson import SpeechToTextV1
 from ibm_watson.websocket import AudioSource
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 
-from recog_callback import RecognizeCallback1 as MyRecognizeCallback
+from watson_recognizer import RecognizeCallback as MyRecognizeCallback
 
 # Watson websocket prints justs too many debug logs, so disable it
 logging.disable(logging.CRITICAL)
