@@ -4,3 +4,12 @@ fastai
 ibm-watson
 pyaudio
 twilio
+flask
+flask-socketio
+eventlet
+#gevent-websocket
+gunicorn
+gtts
+librosa
+pydub
+deepspeech

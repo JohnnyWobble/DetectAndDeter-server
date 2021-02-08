@@ -71,15 +71,16 @@ class WatsonRecognizer:
 
 
 class RecognizeCallback(RCallback):
-    def __init__(self, prints=False):
-        super().__init__()
+    def __init__(self, queues, prints=False):
         self.last = ''
-        self.transcript_q = Queue()
+        self.queues = queues
         self.prints = prints
 
     def on_transcription(self, transcript):
-        self.last = transcript[0]['transcript'].strip()
-        self.transcript_q.put(self.last)
+        self.last = transcript[0]['transcript'].strip().replace(" %HESITATION", "")
+        print("STT:", self.last)
+        for q in self.queues:
+            q.put(self.last)
 
         if self.prints:
             print("\r--> ", self.last)

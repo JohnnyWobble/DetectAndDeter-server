@@ -21,16 +21,16 @@ CATEGORIES = ["Question", "Command", "General Exchange", "Persuasion", "Informat
 PREDICTIONS = {c: Prediction(c) for c in CATEGORIES}
 
 
-def predict_text(text: str):
+def predict_text(text):
     text.replace(" %HESITATION", "")
     p = model.predict(text)
-    return PREDICTIONS[str(p[0])]
+    return PREDICTIONS[str(p[0])], max(p[2])
 
 
 if __name__ == '__main__':
     while True:
-        user_input = input("> ")
+        inp = input("> ")
         now = datetime.now()
-        prediction = predict_text(user_input)
+        prediction, confidence = predict_text(inp)
         time_seconds = (datetime.now() - now).microseconds / 1000000
-        print(f"{prediction} {time_seconds}s")
+        print(f"{prediction} {confidence*100:4.1f}% {time_seconds:5.3f}s")

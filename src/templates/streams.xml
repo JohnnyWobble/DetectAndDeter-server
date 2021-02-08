@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Start</Say>
+<!--    <Start>-->
+    <Connect>
+      <Stream url="wss://dad0.ddns.net/voice"/>
+    </Connect>
+<!--    </Start>-->
+<!--  <Pause length="40"/>-->
+  <Say>End</Say>
+</Response>
