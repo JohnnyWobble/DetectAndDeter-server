@@ -2,14 +2,13 @@ from multiprocessing import Queue, Process, Manager, Event
 from io import BytesIO
 import audioop
 import base64
+import numpy as np
+import datetime as dt
 
-from ibm_watson import SpeechToTextV1
-from ibm_watson.websocket import AudioSource
-from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from gtts import gTTS
 from pydub import AudioSegment
+from deepspeech import Model
 
-from watson_recognizer import RecognizeCallback
 from ai import model
 from chatbot import chatbot
 
@@ -18,12 +17,16 @@ class DetectAndDeter:
     CLASSIFICATION_COUNT = 5
     TELEMARKETER_THRESH = 0.3
     VALID_CALLER_THRESH = 0.1
+    IN_AUDIO_RATE = 8000
+    DS_AUDIO_RATE = 16000
+    QUIET_THRESH = 150
+    QUIET_LENGTH = 3000
 
-    def __init__(self, encoding="mulaw", rate=8000):
-        self.encoding = encoding
-        self.rate = rate
+    def __init__(self, name):
+        self.name = name  # user's name  e.g. "Bob Ross"
         self.is_telemarketer = None
         self.valid_caller_event = Event()
+        self.caller_audio_chunk = np.array([], dtype='int16')
 
         self.audio_in_queue = Queue()
         self.stt_to_classification_queue = Queue()
@@ -34,25 +37,12 @@ class DetectAndDeter:
         self.manager = Manager()
         self.transcript = self.manager.list()
         self.predictions = self.manager.list()
-        self.audio_source = AudioSource(self.audio_in_queue, True, True)
+        self.deep_speech = None
 
         self.final_transcript = None
         self.final_predictions = None
 
-        # initialize speech to text service
-        self.authenticator = IAMAuthenticator('zPJij17cD8uAVUsaWqRgZPyGt9CH5q8XuwNGurfFhtXW')
-        self.speech_to_text = SpeechToTextV1(authenticator=self.authenticator)
-        self.callback = RecognizeCallback(queues=(self.stt_to_chatbot_queue, self.stt_to_classification_queue))
-
-        self.recognize_thread = Process(target=self.speech_to_text.recognize_using_websocket, kwargs=dict(
-            audio=self.audio_source,
-            content_type=f"audio/{self.encoding}; rate={self.rate}",
-            model="en-US_NarrowbandModel",
-            recognize_callback=self.callback,
-            interim_results=True,
-            profanity_filter=False,
-            end_of_phrase_silence_time=0.4))
-
+        self.speech_to_text_thread = Process(target=self.speech_to_text)
         self.classify_text_thread = Process(target=self.classify_text)
         self.generate_response_thread = Process(target=self.generate_responses)
         self.text_to_speech_thread = Process(target=self.text_to_speech)
@@ -62,7 +52,7 @@ class DetectAndDeter:
         return self.audio_in_queue, self.audio_out_queue
 
     def start(self):
-        self.recognize_thread.start()
+        self.speech_to_text_thread.start()
         self.classify_text_thread.start()
         self.generate_response_thread.start()
         self.text_to_speech_thread.start()
@@ -71,9 +61,9 @@ class DetectAndDeter:
         self.final_predictions = [value for value in self.predictions]
         self.final_transcript = [value for value in self.transcript]
 
-        self.recognize_thread.terminate()
-        self.recognize_thread.join()
-        self.recognize_thread.close()
+        self.speech_to_text_thread.terminate()
+        self.speech_to_text_thread.join()
+        self.speech_to_text_thread.close()
 
         self.classify_text_thread.terminate()
         self.classify_text_thread.join()
@@ -129,7 +119,7 @@ class DetectAndDeter:
 
             sound = AudioSegment.from_mp3(mp3_fp)
             sound = sound.set_channels(1)
-            sound = sound.set_frame_rate(self.rate)
+            sound = sound.set_frame_rate(self.IN_AUDIO_RATE)
 
             ulaw_sound = audioop.lin2ulaw(sound.raw_data, 2)
 
@@ -139,3 +129,43 @@ class DetectAndDeter:
             for c in range(chunks):
                 chunk = ulaw_sound[c*chunk_len:c*chunk_len+chunk_len]
                 self.audio_out_queue.put(base64.b64encode(chunk).decode('utf-8'))
+
+    def speech_to_text(self):
+        self.deep_speech = Model('models/deepspeech-0.9.3-models.pbmm')
+        self.deep_speech.enableExternalScorer('models/deepspeech-0.9.3-models.scorer')
+
+        stream = self.deep_speech.createStream()
+
+        while True:
+            speech = self.audio_in_queue.get()
+
+            while not self.audio_in_queue.empty():
+                speech += self.audio_in_queue.get()
+
+            lin_speech = audioop.ulaw2lin(speech, 2)
+            ds_speech, _ = audioop.ratecv(lin_speech, 2, 1, self.IN_AUDIO_RATE, self. DS_AUDIO_RATE, None)
+
+            lin_speech_arr = np.frombuffer(lin_speech, np.int16)
+            ds_speech_arr = np.frombuffer(ds_speech, np.int16)
+
+            stream.feedAudioContent(ds_speech_arr)
+
+            self.caller_audio_chunk = np.concatenate((self.caller_audio_chunk, lin_speech_arr))
+
+            chunk_idx = max(0, len(self.caller_audio_chunk) - self.QUIET_LENGTH)
+            quiet_chunk = self.caller_audio_chunk[chunk_idx:]
+            if (quiet_chunk < self.QUIET_THRESH).all() and (self.caller_audio_chunk > self.QUIET_THRESH).any():
+                text = stream.intermediateDecode()
+
+                if text.strip():
+                    self.stt_to_chatbot_queue.put(text)
+                    self.stt_to_classification_queue.put(text)
+
+                    stream.finishStream()
+                    stream = self.deep_speech.createStream()
+
+                self.caller_audio_chunk = np.array([], dtype='int16')
+
+    def make_greeting(self):
+        self.chatbot_to_tts_queue.put(f"Hi, this is {self.name} how may I help you?")
+

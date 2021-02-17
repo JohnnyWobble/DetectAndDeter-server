@@ -10,12 +10,13 @@ from geventwebsocket.websocket import WebSocket
 
 from detectanddeter import DetectAndDeter
 
-logging.basicConfig(filename='detectanddeter.log', level=logging.DEBUG, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
+logging.basicConfig(filename='detectanddeter.log', level=logging.INFO, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
 # logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
 # logging.getLogger("websocket").setLevel(logging.WARNING)
 
 logging.info(" --- STARTING ---")
 HOSTNAME = "dad0.ddns.net"
+TEST_NAME = "Max Gordon"
 HTTP_SERVER_PORT = 6000
 LOG_PATH = Path("./call_logs")
 
@@ -36,9 +37,10 @@ def echo(ws: WebSocket):
     print("Connection accepted")
     count = 0
     sid = None
-    dad = DetectAndDeter()
+    dad = DetectAndDeter(TEST_NAME)
     in_queue, out_queue = dad.queues
     dad.start()
+    dad.make_greeting()
 
     while not ws.closed:
         message = ws.receive()
