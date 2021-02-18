@@ -11,6 +11,9 @@ from deepspeech import Model
 
 from ai import model
 from chatbot import chatbot
+from utils import get_file_by_extension
+
+VERSION = "0.0.1"
 
 
 class DetectAndDeter:
@@ -24,7 +27,6 @@ class DetectAndDeter:
 
     def __init__(self, name):
         self.name = name  # user's name  e.g. "Bob Ross"
-        self.is_telemarketer = None
         self.valid_caller_event = Event()
         self.caller_audio_chunk = np.array([], dtype='int16')
 
@@ -36,7 +38,7 @@ class DetectAndDeter:
 
         self.manager = Manager()
         self.transcript = self.manager.list()
-        self.predictions = self.manager.list()
+        self.is_telemarketer = self.manager.Value("is_telemarketer", None)
         self.deep_speech = None
 
         self.final_transcript = None
@@ -46,6 +48,9 @@ class DetectAndDeter:
         self.classify_text_thread = Process(target=self.classify_text)
         self.generate_response_thread = Process(target=self.generate_responses)
         self.text_to_speech_thread = Process(target=self.text_to_speech)
+
+        self.log = {"start": None, "end": None, "version": VERSION, "transcript": [],
+                    "is_telemarketer": None, "caller": None}
 
     @property
     def queues(self):
@@ -57,9 +62,12 @@ class DetectAndDeter:
         self.generate_response_thread.start()
         self.text_to_speech_thread.start()
 
+        self.log["start"] = dt.datetime.now().isoformat()
+
     def close(self):
-        self.final_predictions = [value for value in self.predictions]
-        self.final_transcript = [value for value in self.transcript]
+        self.log["transcript"] = [value for value in self.transcript]
+        self.log["is_telemarketer"] = self.is_telemarketer.get()
+        self.log["end"] = dt.datetime.now().isoformat()
 
         self.speech_to_text_thread.terminate()
         self.speech_to_text_thread.join()
@@ -77,14 +85,21 @@ class DetectAndDeter:
         self.text_to_speech_thread.join()
         self.text_to_speech_thread.close()
 
-    def classify_text(self):
-        while self.is_telemarketer is None:
-            text = self.stt_to_classification_queue.get()
-            preds = model.predict(text)
-            self.predictions.append({"prediction": str(preds[0]).lower(), "confidence": max(preds[2])})
-            all_preds = [t["prediction"] for t in self.predictions]
+    def fill_log_info(self, caller_number):
+        self.log['caller'] = caller_number
+        return self.log
 
-            maybe_telemarketer = all_preds.count("persuasion") / len(preds)
+    def classify_text(self):
+        predictions = []
+        while self.is_telemarketer is None:
+            idx = self.stt_to_classification_queue.get()
+            text = self.transcript[idx]['text']
+
+            preds = model.predict(text)
+            self.transcript[idx]['analysis'] = {"prediction": str(preds[0]).lower(), "confidence": max(preds[2])}
+            predictions.append(str(preds[0]).lower())
+
+            maybe_telemarketer = predictions.count("persuasion") / len(preds)
 
             if len(preds) > self.CLASSIFICATION_COUNT:
                 if maybe_telemarketer > self.TELEMARKETER_THRESH:
@@ -102,9 +117,6 @@ class DetectAndDeter:
             text = self.stt_to_chatbot_queue.get()
             print("Generate Response:", text)
             response = str(chatbot.get_response(text))
-
-            self.transcript.append({"speaker": "caller", "text": text})
-            self.transcript.append({"speaker": "self", "text": response})
 
             self.chatbot_to_tts_queue.put(response)
 
@@ -130,9 +142,12 @@ class DetectAndDeter:
                 chunk = ulaw_sound[c*chunk_len:c*chunk_len+chunk_len]
                 self.audio_out_queue.put(base64.b64encode(chunk).decode('utf-8'))
 
+            self.transcript.append({"speaker": "self", "text": response,
+                                    "datetime": dt.datetime.now().isoformat()})
+
     def speech_to_text(self):
-        self.deep_speech = Model('models/deepspeech-0.9.3-models.pbmm')
-        self.deep_speech.enableExternalScorer('models/deepspeech-0.9.3-models.scorer')
+        self.deep_speech = Model(get_file_by_extension('pbmm'))
+        self.deep_speech.enableExternalScorer(get_file_by_extension('scorer'))
 
         stream = self.deep_speech.createStream()
 
@@ -159,13 +174,19 @@ class DetectAndDeter:
 
                 if text.strip():
                     self.stt_to_chatbot_queue.put(text)
-                    self.stt_to_classification_queue.put(text)
+
+                    idx = len(self.transcript)  # insert to avoid race conditions with indexes
+                    self.transcript.insert(idx, {"speaker": "caller", "text": text,
+                                                 "datetime": dt.datetime.now().isoformat()})
+                    self.stt_to_classification_queue.put(idx)
 
                     stream.finishStream()
                     stream = self.deep_speech.createStream()
 
                 self.caller_audio_chunk = np.array([], dtype='int16')
 
-    def make_greeting(self):
+    def make_greeting(self, one_party_consent):
         self.chatbot_to_tts_queue.put(f"Hi, this is {self.name} how may I help you?")
 
+        if not one_party_consent:
+            self.chatbot_to_tts_queue.put("Keep in mind, I record all calls")

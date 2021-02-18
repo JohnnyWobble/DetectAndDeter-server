@@ -4,16 +4,16 @@ import sys
 import logging
 from pathlib import Path
 
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_sockets import Sockets
 from geventwebsocket.websocket import WebSocket
 
 from detectanddeter import DetectAndDeter
 
-logging.basicConfig(filename='detectanddeter.log', level=logging.INFO, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
-# logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
-# logging.getLogger("websocket").setLevel(logging.WARNING)
+logging.basicConfig(filename='detectanddeter.log', level=logging.INFO
+                    , format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
 
+ONE_PARTY_RECORDING_CONSENT = True  # only one party's consent is needed in Virginia
 logging.info(" --- STARTING ---")
 HOSTNAME = "dad0.ddns.net"
 TEST_NAME = "Max Gordon"
@@ -22,14 +22,12 @@ LOG_PATH = Path("./call_logs")
 
 app = Flask(__name__)
 app.config['DEBUG'] = False
-# app.config['SECRET_KEY'] = 'secret!'
 sockets = Sockets(app)
 
 
 @app.route('/twiml', methods=['POST', 'GET'])
 def return_twiml():
-    print("POST TwiML")
-    return render_template('streams.xml')
+    return render_template('streams.xml', caller_number=request.values['Caller'])
 
 
 @sockets.route('/voice')
@@ -37,10 +35,11 @@ def echo(ws: WebSocket):
     print("Connection accepted")
     count = 0
     sid = None
+    caller_number = None
     dad = DetectAndDeter(TEST_NAME)
     in_queue, out_queue = dad.queues
     dad.start()
-    dad.make_greeting()
+    dad.make_greeting(ONE_PARTY_RECORDING_CONSENT)
 
     while not ws.closed:
         message = ws.receive()
@@ -52,6 +51,8 @@ def echo(ws: WebSocket):
             pass
         elif data['event'] == "start":
             sid = data['streamSid']
+            logging.info(data)
+            caller_number = data["start"]["customParameters"]["callerNumber"]
         elif data['event'] == "media":
             in_queue.put(base64.b64decode(data['media']['payload']))
             if not out_queue.empty():
@@ -70,7 +71,16 @@ def echo(ws: WebSocket):
         count += 1
 
     dad.close()
+    log = dad.fill_log_info(caller_number)
     logging.info(f"Connection closed | SID: {sid} | messages: {count}")
+    print(f"Connection closed | SID: {sid} | messages: {count}")
+
+    with open(LOG_PATH/f"call{clean_name(log['start'])}.json", 'w') as f:
+        json.dump(log, f)
+
+
+def clean_name(name: str):
+    return name.replace('.', "").replace(":", "").replace("-", "")
 
 
 if __name__ == "__main__":

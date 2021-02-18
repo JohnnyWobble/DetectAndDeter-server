@@ -3,7 +3,10 @@ import datetime
 from fastai.text.all import *
 from fastai.callback.all import *
 
-model: TextLearner = load_learner('models/rev5-1.model')
+from utils import get_file_by_extension
+
+
+model: TextLearner = load_learner(get_file_by_extension("model"))
 
 
 class Prediction:
@@ -32,5 +35,5 @@ if __name__ == '__main__':
         inp = input("> ")
         now = datetime.now()
         prediction, confidence = predict_text(inp)
-        time_seconds = (datetime.now() - now).microseconds / 1000000
+        time_seconds = (datetime.now() - now).total_seconds()
         print(f"{prediction} {confidence*100:4.1f}% {time_seconds:5.3f}s")

@@ -24,7 +24,7 @@ class WatsonRecognizer:
         # Buffer to store audio
         self.audio_q = Queue(maxsize=int(round(self.BUF_MAX_SIZE / self.CHUNK)))
         self.audio_source = AudioSource(self.audio_q, True, True)
-        self.callback = RecognizeCallback(prints=prints)
+        self.callback = RecognizeCallback(prints=prints, queues=[])
 
         # initialize speech to text service
         self.authenticator = IAMAuthenticator('zPJij17cD8uAVUsaWqRgZPyGt9CH5q8XuwNGurfFhtXW')
