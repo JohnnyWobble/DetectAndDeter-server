@@ -1,19 +1,18 @@
 from multiprocessing import Queue, Process, Manager, Event
-from io import BytesIO
 import audioop
 import base64
-import numpy as np
+from pathlib import Path
 import datetime as dt
+import json
+import numpy as np
 
-from gtts import gTTS
-from pydub import AudioSegment
+from TTS.utils.synthesizer import Synthesizer
 from deepspeech import Model
 
 from ai import model
 from chatbot import chatbot
-from utils import get_file_by_extension
 
-VERSION = "0.0.1"
+CONFIG = json.load(open("config.json", 'r'))
 
 
 class DetectAndDeter:
@@ -22,6 +21,7 @@ class DetectAndDeter:
     VALID_CALLER_THRESH = 0.1
     IN_AUDIO_RATE = 8000
     DS_AUDIO_RATE = 16000
+    MOZILLA_TTS_AUDIO_RATE = 22050
     QUIET_THRESH = 150
     QUIET_LENGTH = 3000
 
@@ -39,7 +39,9 @@ class DetectAndDeter:
         self.manager = Manager()
         self.transcript = self.manager.list()
         self.is_telemarketer = self.manager.Value("is_telemarketer", None)
+
         self.deep_speech = None
+        self.mozilla_tts = None
 
         self.final_transcript = None
         self.final_predictions = None
@@ -49,7 +51,7 @@ class DetectAndDeter:
         self.generate_response_thread = Process(target=self.generate_responses)
         self.text_to_speech_thread = Process(target=self.text_to_speech)
 
-        self.log = {"start": None, "end": None, "version": VERSION, "transcript": [],
+        self.log = {"start": None, "end": None, "version": CONFIG['version'], "transcript": [],
                     "is_telemarketer": None, "caller": None}
 
     @property
@@ -121,19 +123,29 @@ class DetectAndDeter:
             self.chatbot_to_tts_queue.put(response)
 
     def text_to_speech(self):
+        tts_config = CONFIG['tts_config']
+        models_folder = Path(tts_config['folder'])
+
+        model_path = str(models_folder/tts_config['model'])
+        model_config_path = str(models_folder/tts_config['model_config'])
+        vocoder_path = str(models_folder/tts_config['vocoder'])
+        vocoder_config_path = str(models_folder/tts_config['vocoder_config'])
+
+        self.mozilla_tts = Synthesizer(model_path, model_config_path, vocoder_path, vocoder_config_path)
+
         while True:
             response = self.chatbot_to_tts_queue.get()
             print("TTS:", response)
-            mp3_fp = BytesIO()
-            tts = gTTS(response, lang='en')
-            tts.write_to_fp(mp3_fp)
-            mp3_fp.seek(0)
 
-            sound = AudioSegment.from_mp3(mp3_fp)
-            sound = sound.set_channels(1)
-            sound = sound.set_frame_rate(self.IN_AUDIO_RATE)
+            sound_arr = np.array(self.mozilla_tts.tts(response))
 
-            ulaw_sound = audioop.lin2ulaw(sound.raw_data, 2)
+            sound_arr *= 2**15
+            sound_arr = sound_arr.astype('int16')
+
+            sound = bytes(sound_arr)
+            sound, _ = audioop.ratecv(sound, 2, 1, self.MOZILLA_TTS_AUDIO_RATE, self.IN_AUDIO_RATE, None)
+
+            ulaw_sound = audioop.lin2ulaw(sound, 2)
 
             chunk_len = 192
             chunks = len(ulaw_sound) // chunk_len
@@ -146,8 +158,13 @@ class DetectAndDeter:
                                     "datetime": dt.datetime.now().isoformat()})
 
     def speech_to_text(self):
-        self.deep_speech = Model(get_file_by_extension('pbmm'))
-        self.deep_speech.enableExternalScorer(get_file_by_extension('scorer'))
+        stt_config = CONFIG['stt_config']
+        models_folder = Path(stt_config['folder'])
+        model_path = str(models_folder/stt_config['model'])
+        scorer_path = str(models_folder/stt_config['scorer'])
+
+        self.deep_speech = Model(model_path)
+        self.deep_speech.enableExternalScorer(scorer_path)
 
         stream = self.deep_speech.createStream()
 

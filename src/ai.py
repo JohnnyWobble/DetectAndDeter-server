@@ -1,12 +1,16 @@
 import datetime
+from pathlib import Path
 
 from fastai.text.all import *
 from fastai.callback.all import *
 
 from utils import get_file_by_extension
 
+CONFIG = json.load(open("config.json", 'r'))
 
-model: TextLearner = load_learner(get_file_by_extension("model"))
+model_folder = Path(CONFIG['classifier_config']['folder'])
+
+model: TextLearner = load_learner(model_folder/CONFIG['classifier_config']['model'])
 
 
 class Prediction:

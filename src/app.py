@@ -1,9 +1,10 @@
 import json
 import base64
-import sys
 import logging
 from pathlib import Path
+from os import path, mkdir
 
+from twilio.rest import Client
 from flask import Flask, render_template, request
 from flask_sockets import Sockets
 from geventwebsocket.websocket import WebSocket
@@ -24,10 +25,29 @@ app = Flask(__name__)
 app.config['DEBUG'] = False
 sockets = Sockets(app)
 
+@app.route('/')
+def test():
+    return "hi"
+
 
 @app.route('/twiml', methods=['POST', 'GET'])
 def return_twiml():
     return render_template('streams.xml', caller_number=request.values['Caller'])
+
+
+@app.route('/recording', methods=['GET', 'POST'])
+def get_recording():
+    print(request.values)
+
+
+def start_recording(call_sid):
+    client = Client(**json.load(open('creds.json', 'r')))
+    recording = client.calls(call_sid).recordings.create()
+    print(recording.uri)
+    # account_sid = 'ACbcdc5b58f61e79f11087c524cbdaa870'
+    #
+    # response = post(f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json")
+    # print(response.json)
 
 
 @sockets.route('/voice')
@@ -53,6 +73,8 @@ def echo(ws: WebSocket):
             sid = data['streamSid']
             logging.info(data)
             caller_number = data["start"]["customParameters"]["callerNumber"]
+
+            start_recording(data['start']['callSid'])
         elif data['event'] == "media":
             in_queue.put(base64.b64decode(data['media']['payload']))
             if not out_queue.empty():
@@ -81,6 +103,11 @@ def echo(ws: WebSocket):
 
 def clean_name(name: str):
     return name.replace('.', "").replace(":", "").replace("-", "")
+
+
+def init():
+    if not path.exists('src/call_logs'):
+        mkdir("call_logs")
 
 
 if __name__ == "__main__":

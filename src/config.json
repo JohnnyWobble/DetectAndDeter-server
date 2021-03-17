@@ -1,0 +1,28 @@
+{
+  "name": "DetectAndDeter",
+  "paper_name": "Using AI to Detect and Deter Telemarketers",
+  "description": "A system utilizing an AWD-LSTM language classifier that attempts to identify telemarketers based on how 'persuasive' their speech is. Uses other open-sourced components for the TTS, STT, and chatbot.",
+  "version": "0.0.1",
+  "author": "Max Gordon",
+
+  "tts_config": {
+    "folder": "models",
+    "vocoder": "vocoder_model.pth",
+    "vocoder_config": "config_vocoder.json",
+    "model": "tts_model.pth",
+    "model_config": "tts_model_config.json"
+  },
+
+  "stt_config": {
+    "folder": "models",
+    "model": "deepspeech-0.9.3-models.pbmm",
+    "scorer": "deepspeech-0.9.3-models.scorer"
+  },
+
+  "chatbot_config": {},
+
+  "classifier_config": {
+    "folder": "models",
+    "model": "rev5-1.model"
+  }
+}

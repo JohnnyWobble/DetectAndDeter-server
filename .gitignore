@@ -1,3 +1,14 @@
+# Models
+src/models/*.pbmm
+src/models/*.scorer
+src/models/*.pth
+src/models/*.json
+src/models/*.npy
+
+# Call logs
+src/call_logs/*.json
+
+
 # SSL stuff
 *ssl*
 

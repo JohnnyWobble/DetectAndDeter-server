@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
-      <Stream url="wss://dad0.ddns.net/voice">
-          <Parameter name="callerNumber" value="{{caller_number}}"/>
-      </Stream>
+        <Stream url="wss://dad0.ddns.net/voice">
+            <Parameter name="callerNumber" value="{{caller_number}}"/>
+        </Stream>
     </Connect>
 </Response>
