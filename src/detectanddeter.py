@@ -94,12 +94,16 @@ class DetectAndDeter:
     def classify_text(self):
         predictions = []
         while self.is_telemarketer.value is None:
-            print("!!!!!!!!")
             idx = self.stt_to_classification_queue.get()
             text = self.transcript[idx]['text']
 
+            print(idx, text)
+
             preds = model.predict(text)
-            self.transcript[idx]['analysis'] = {"prediction": str(preds[0]).lower(), "confidence": max(preds[2])}
+            transcript_line = self.transcript[idx]
+            transcript_line['analysis'] = {"prediction": str(preds[0]).lower(), "confidence": float(max(preds[2]))}
+            self.transcript[idx] = transcript_line
+            print(self.transcript)
             predictions.append(str(preds[0]).lower())
 
             maybe_telemarketer = predictions.count("persuasion") / len(preds)
@@ -110,6 +114,7 @@ class DetectAndDeter:
                     break
                 elif maybe_telemarketer < self.VALID_CALLER_THRESH:
                     self.is_telemarketer.value = False
+                    # self.is_telemarketer.set()
                     break
 
         if not self.is_telemarketer.value:

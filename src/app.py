@@ -84,8 +84,6 @@ def echo(ws: WebSocket):
                     "media": {
                         "payload": out_queue.get()
                     }}))
-            if count == 1000:
-                dad.make_greeting(ONE_PARTY_RECORDING_CONSENT)
         elif data['event'] == 'stop':
             pass
         elif data['event'] == "closed":
