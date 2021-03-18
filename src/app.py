@@ -74,7 +74,7 @@ def echo(ws: WebSocket):
             logging.info(data)
             caller_number = data["start"]["customParameters"]["callerNumber"]
 
-            start_recording(data['start']['callSid'])
+            # start_recording(data['start']['callSid'])
         elif data['event'] == "media":
             in_queue.put(base64.b64decode(data['media']['payload']))
             if not out_queue.empty():
@@ -84,6 +84,8 @@ def echo(ws: WebSocket):
                     "media": {
                         "payload": out_queue.get()
                     }}))
+            if count == 1000:
+                dad.make_greeting(ONE_PARTY_RECORDING_CONSENT)
         elif data['event'] == 'stop':
             pass
         elif data['event'] == "closed":

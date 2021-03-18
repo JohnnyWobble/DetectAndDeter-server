@@ -68,7 +68,7 @@ class DetectAndDeter:
 
     def close(self):
         self.log["transcript"] = [value for value in self.transcript]
-        self.log["is_telemarketer"] = self.is_telemarketer.get()
+        self.log["is_telemarketer"] = self.is_telemarketer.value
         self.log["end"] = dt.datetime.now().isoformat()
 
         self.speech_to_text_thread.terminate()
@@ -93,7 +93,8 @@ class DetectAndDeter:
 
     def classify_text(self):
         predictions = []
-        while self.is_telemarketer is None:
+        while self.is_telemarketer.value is None:
+            print("!!!!!!!!")
             idx = self.stt_to_classification_queue.get()
             text = self.transcript[idx]['text']
 
@@ -105,13 +106,13 @@ class DetectAndDeter:
 
             if len(preds) > self.CLASSIFICATION_COUNT:
                 if maybe_telemarketer > self.TELEMARKETER_THRESH:
-                    self.is_telemarketer = True
+                    self.is_telemarketer.value = True
                     break
                 elif maybe_telemarketer < self.VALID_CALLER_THRESH:
-                    self.is_telemarketer = False
+                    self.is_telemarketer.value = False
                     break
 
-        if not self.is_telemarketer:
+        if not self.is_telemarketer.value:
             self.valid_caller_event.set()
 
     def generate_responses(self):
@@ -147,11 +148,16 @@ class DetectAndDeter:
 
             ulaw_sound = audioop.lin2ulaw(sound, 2)
 
-            chunk_len = 192
+            chunk_len = 540
             chunks = len(ulaw_sound) // chunk_len
+            extra = len(ulaw_sound) - (chunks * chunk_len)
 
             for c in range(chunks):
                 chunk = ulaw_sound[c*chunk_len:c*chunk_len+chunk_len]
+                self.audio_out_queue.put(base64.b64encode(chunk).decode('utf-8'))
+
+            if extra != 0:
+                chunk = ulaw_sound[-extra:]
                 self.audio_out_queue.put(base64.b64encode(chunk).decode('utf-8'))
 
             self.transcript.append({"speaker": "self", "text": response,
@@ -203,7 +209,7 @@ class DetectAndDeter:
                 self.caller_audio_chunk = np.array([], dtype='int16')
 
     def make_greeting(self, one_party_consent):
-        self.chatbot_to_tts_queue.put(f"Hi, this is {self.name} how may I help you?")
+        self.chatbot_to_tts_queue.put(f"Hi. This is {self.name} how may I help you?")
 
         if not one_party_consent:
             self.chatbot_to_tts_queue.put("Keep in mind, I record all calls")
