@@ -97,18 +97,17 @@ class DetectAndDeter:
             idx = self.stt_to_classification_queue.get()
             text = self.transcript[idx]['text']
 
-            print(idx, text)
-
             preds = model.predict(text)
             transcript_line = self.transcript[idx]
             transcript_line['analysis'] = {"prediction": str(preds[0]).lower(), "confidence": float(max(preds[2]))}
             self.transcript[idx] = transcript_line
-            print(self.transcript)
             predictions.append(str(preds[0]).lower())
 
-            maybe_telemarketer = predictions.count("persuasion") / len(preds)
+            maybe_telemarketer = predictions.count("persuasion") / len(predictions)
 
-            if len(preds) > self.CLASSIFICATION_COUNT:
+            if len(predictions) > self.CLASSIFICATION_COUNT:
+                print("CLASS")
+                print(maybe_telemarketer, self.TELEMARKETER_THRESH, self.VALID_CALLER_THRESH)
                 if maybe_telemarketer > self.TELEMARKETER_THRESH:
                     self.is_telemarketer.value = True
                     break

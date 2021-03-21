@@ -6,7 +6,7 @@ src/models/*.json
 src/models/*.npy
 
 # Call logs
-src/call_logs/*.json
+src/call_logs/call*.json
 
 
 # SSL stuff
